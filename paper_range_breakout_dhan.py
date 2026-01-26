@@ -356,6 +356,7 @@ def manage_sl_tsl(pos, ltp):
 # ======================
 
 def run():
+    print("run running succesfully")
     exit_flag = False
     reason = None
 
@@ -526,6 +527,7 @@ def run():
  
 
 if __name__ == "__main__":
+    print("file running succesfully")
     while True:
         run()
  

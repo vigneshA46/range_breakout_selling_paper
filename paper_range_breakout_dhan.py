@@ -17,6 +17,7 @@ ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 BASE_URL = "https://api.dhan.co/v2"
 INTRADAY_URL = f"{BASE_URL}/charts/intraday"
 FNO_MASTER_URL = f"{BASE_URL}/instrument/NSE_FNO"
+SHEETS=os.getenv("SHEETS")
 
 HEADERS = {
     "access-token": ACCESS_TOKEN,
@@ -285,15 +286,38 @@ def init_logs():
             writer = csv.writer(f)
             writer.writerow(["time","event","info"])
 
+def send_to_sheet(sheet, row):
+    payload = {
+        "sheet": sheet,
+        "row": row
+    }
+
+    try:
+        r = requests.post(SHEETS, json=payload, timeout=5)
+        r.raise_for_status()
+    except Exception as e:
+        print("Log failed:", e)
+
+
 
 def log_event(event, info=""):
-    with open("engine_log.csv","a",newline="") as f:
-        csv.writer(f).writerow([datetime.now(IST), event, info])
-
+    send_to_sheet("engine_log", [
+        datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        event,
+        info
+    ])
 
 def log_trade(symbol, side, entry, exit, qty, pnl, reason):
-    with open("trades.csv","a",newline="") as f:
-        csv.writer(f).writerow([datetime.now(IST), symbol, side, entry, exit, qty, pnl, reason])
+    send_to_sheet("trades", [
+        datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        symbol,
+        side,
+        entry,
+        exit,
+        qty,
+        pnl,
+        reason
+    ])
 
 
 # ======================
@@ -313,35 +337,32 @@ def new_position(symbol, price):
 
 def manage_sl_tsl(pos, ltp):
     """
-    Returns (exit, reason)
+    For SHORT option positions.
+    Returns (exit_flag, reason)
     """
 
     entry = pos["entry"]
 
     # ---------- ACTIVATE TSL ----------
-    
     if not pos["active"]:
         if ltp <= entry - 30:
             pos["active"] = True
             pos["trail_steps"] = 1
+            pos["sl"] = entry + 15
 
-            pos["sl"]  = entry + 15 - 10
-            pos["tsl"] = entry + 30 - 10
-
-            print(f"🟢 {pos['symbol']} TSL Activated | SL={pos['sl']} TSL={pos['tsl']}")
+            print(f"🟢 {pos['symbol']} TSL Activated | SL={pos['sl']}")
 
     # ---------- TRAIL ----------
     if pos["active"]:
         favorable = entry - ltp
-        steps = int((favorable - 30) // 10) + 1
+        steps = max(1, int((favorable - 30) // 10) + 1)
 
         if steps > pos["trail_steps"]:
             diff = (steps - pos["trail_steps"]) * 10
-            pos["sl"]  -= diff
-            pos["tsl"] -= diff
+            pos["sl"] -= diff
             pos["trail_steps"] = steps
 
-            print(f"🔁 {pos['symbol']} Trailed | SL={pos['sl']} TSL={pos['tsl']}")
+            print(f"🔁 {pos['symbol']} Trailed | SL={pos['sl']}")
 
     # ---------- SL HIT ----------
     if pos["active"] and ltp >= pos["sl"]:
@@ -350,12 +371,15 @@ def manage_sl_tsl(pos, ltp):
     return False, None
 
 
-
 # ======================
 # MAIN ENGINE
 # ======================
 
 def run():
+    print("run function")
+
+if __name__ == "__main__":
+    print("file running succesfully")
     print("run running succesfully")
     exit_flag = False
     reason = None
@@ -441,24 +465,32 @@ def run():
         avg = (idx.open + idx.high + idx.low + idx.close) / 4
         # ================= SL / TSL =================
 
+        exit_flag = False
+        reason = None
+
         # ---- CE ----
         if ce_pos:
             exit_flag, reason = manage_sl_tsl(ce_pos, ce_c.close)
-        if exit_flag:
+
+        if exit_flag and ce_pos:
             pnl = (ce_pos["entry"] - ce_c.close) * QTY
-            log_trade("CE","SELL",ce_pos["entry"],ce_c.close,QTY,pnl,reason)
+            log_trade("CE", "SELL", ce_pos["entry"], ce_c.close, QTY, pnl, reason)
             total_pnl += pnl
             ce_pos = None
- 
+
+
+        exit_flag = False
+        reason = None
+
         # ---- PE ----
         if pe_pos:
             exit_flag, reason = manage_sl_tsl(pe_pos, pe_c.close)
-        if exit_flag:
+
+        if exit_flag and pe_pos:
             pnl = (pe_pos["entry"] - pe_c.close) * QTY
-            log_trade("PE","SELL",pe_pos["entry"],pe_c.close,QTY,pnl,reason)
+            log_trade("PE", "SELL", pe_pos["entry"], pe_c.close, QTY, pnl, reason)
             total_pnl += pnl
             pe_pos = None
-
 
         # ================= ENTRY SIGNAL =================
 
@@ -476,13 +508,13 @@ def run():
 
         # ================= EXECUTE PENDING =================
 
-        if pending_ce and ce_pos is None and idx.datetime > signal_ce_time:
+        if pending_ce and ce_pos is None and idx.datetime >= signal_ce_time + timedelta(minutes=1):
             ce_pos = new_position("CE", ce_c.close)
             pending_ce = False
             signal_ce_time = None
             log_event("CE_ENTRY", ce_c.close)
 
-        if pending_pe and pe_pos is None and idx.datetime > signal_pe_time:
+        if pending_pe and pe_pos is None and idx.datetime >= signal_pe_time + timedelta(minutes=1):
             pe_pos = new_position("PE", pe_c.close)
             pending_pe = False
             signal_pe_time = None
@@ -524,10 +556,5 @@ def run():
  
     print("Engine Stopped")
     log_event("ENGINE_STOP")
- 
 
-if __name__ == "__main__":
-    print("file running succesfully")
-    while True:
-        run()
  

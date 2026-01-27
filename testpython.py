@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+SHEETS=os.getenv("SHEETS")
 
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 BASE_URL = "https://api.dhan.co/v2"
@@ -71,5 +72,40 @@ def change_time(engine_time):
     print("time after", engine_time)
     return engine_time
 
+def send_to_sheet(sheet, row):
+    payload = {
+        "sheet": sheet,
+        "row": row
+    }
+    try:
+        r = requests.post(SHEETS, json=payload, timeout=5)
+        r.raise_for_status()
+    except Exception as e:
+        print("Log failed:", e)
 
-engine_time = change_time(engine_time)
+def log_event(event, info=""):
+    send_to_sheet("engine_log", [
+        datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        event,
+        info
+    ])
+
+def log_trade(symbol, side, entry, exit, qty, pnl, reason):
+    send_to_sheet("trades", [
+        datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        symbol,
+        side,
+        entry,
+        exit,
+        qty,
+        pnl,
+        reason
+    ])
+
+
+
+log_event("ENGINE_START", "Test engine started")
+log_event("CE_SIGNAL", "Index broke bottom")
+
+log_trade("CE","SELL",210.5,180.2,50,(210.5 - 180.2) * 50,"SL_TRAIL")
+ 

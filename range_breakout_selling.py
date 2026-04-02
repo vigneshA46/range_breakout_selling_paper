@@ -309,8 +309,8 @@ def mark_range():
     ce_strike = ATM - 400
     pe_strike = ATM + 400
 
-    ce_row = find_option_security(fno_df, ATM, "CE", today, "NIFTY")
-    pe_row = find_option_security(fno_df, ATM, "PE", today, "NIFTY")
+    ce_row = find_option_security(fno_df, ce_row, "CE", today, "NIFTY")
+    pe_row = find_option_security(fno_df, pe_row, "PE", today, "NIFTY")
 
     CE_ID = str(ce_row["SECURITY_ID"])
     PE_ID = str(pe_row["SECURITY_ID"])

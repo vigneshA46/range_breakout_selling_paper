@@ -431,7 +431,7 @@ def exit_position(side, price, t, reason):
         return
 
     price = float(price)
-    pnl = pos["entry_price"] - price
+    pnl = pos["entry_price"] - float(price)
     total_pnl += pnl
 
     print(f"❌ {side} EXIT [{reason}] @ {price} | PNL {round(pnl,2)} | TOTAL {round(total_pnl,2)}")
@@ -443,10 +443,10 @@ def exit_position(side, price, t, reason):
         symbol=SYMBOL,
         side="BUY",  # exit of SELL = BUY
         lot=LOT,
-        price=price,
+        price=float(price),
         reason=reason,
-        pnl=pnl,
-        cum_pnl=total_pnl
+        pnl=float(pnl*65),
+        cum_pnl=total_pnl*65
     )
 
 
@@ -503,10 +503,14 @@ def on_tick_option(msg):
     pe_running_pnl = 0
 
     if ce_pos and last_ce_ltp  is not None:
-        ce_running_pnl = ce_pos["entry_price"] - float(last_ce_ltp)
+        ce_running_pnl = (ce_pos["entry_price"] - float(last_ce_ltp))
 
     if pe_pos and last_pe_ltp  is not None:
-        pe_running_pnl = pe_pos["entry_price"] - float(last_pe_ltp)
+        pe_running_pnl = (pe_pos["entry_price"] - float(last_pe_ltp))
+
+    total_pnl= float(ce_running_pnl +  pe_running_pnl)
+
+    
 
     # ---- LTP ENTRY ----
     if token == CE_ID and pending_ce and ce_pos is None:
@@ -531,7 +535,7 @@ def on_tick_option(msg):
         price=ltp,
         reason="SIGNAL",
         pnl=0,
-        cum_pnl=total_pnl
+        cum_pnl=total_pnl*65
     )
 
     if token == PE_ID and pending_pe and pe_pos is None:
@@ -555,7 +559,7 @@ def on_tick_option(msg):
         price=ltp,
         reason="SIGNAL",
         pnl=0,
-        cum_pnl=total_pnl
+        cum_pnl=total_pnl*65
     )
 
     if token == CE_ID and ce_pos:
@@ -567,11 +571,11 @@ def on_tick_option(msg):
     
 
 
-    telemetry["ce_pnl"] = round(ce_running_pnl, 2)
-    telemetry["pe_pnl"] = round(pe_running_pnl, 2)
+    telemetry["ce_pnl"] = round(ce_running_pnl, 2)*65
+    telemetry["pe_pnl"] = round(pe_running_pnl, 2)*65
 
     # total = realized + running
-    telemetry["pnl"] = round(total_pnl + ce_running_pnl + pe_running_pnl, 2)
+    telemetry["pnl"] = round((total_pnl*65) + (ce_running_pnl*65) + (pe_running_pnl*65), 2)
 
 
 

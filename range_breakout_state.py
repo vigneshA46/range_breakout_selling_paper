@@ -18,17 +18,6 @@ import threading
 # =========================
 
 
-trade_log_queue = Queue()
-def trade_log_worker():
-    while True:
-        payload = trade_log_queue.get()
-        try:
-            requests.post(TRADE_LOG_URL, json=payload, timeout=2)
-        except Exception as e:
-            print("TRADE EVENT LOG ERROR:", e)
-        finally:
-            trade_log_queue.task_done()
-
 
 ATM = None 
 
@@ -37,18 +26,18 @@ EVENT_LOG_URL = "https://dreaminalgo-backend-production.up.railway.app/api/paper
 
 COMMON_ID = "bbfe888c-60f9-4968-acf1-2320ce69ce8d"
 SYMBOL = "NIFTY"
-symbol=SYMBOL
+symbol="NIFTY"
 
 load_dotenv()
 
-#CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_ID = "1107425275"
+CLIENT_ID = os.getenv("CLIENT_ID")
+#CLIENT_ID = "1107425275"
 ACCESS_TOKEN = get_access_token()
 
 IST = pytz.timezone("Asia/Kolkata")
 
 
-INDEX_TOKEN = 13
+INDEX_TOKEN = "13"
 
 TRADE_START = dtime(10, 1)
 TRADE_END   = dtime(15, 20)
@@ -92,6 +81,18 @@ telemetry = {
     "pe_pnl": 0
 }
 
+
+trade_log_queue = Queue()
+
+def trade_log_worker():
+    while True:
+        payload = trade_log_queue.get()
+        try:
+            requests.post(TRADE_LOG_URL, json=payload, timeout=2)
+        except Exception as e:
+            print("TRADE EVENT LOG ERROR:", e)
+        finally:
+            trade_log_queue.task_done()
 
 
 
@@ -333,8 +334,8 @@ def mark_range():
 
 def on_tick_index(msg):
     # convert scaled price → real price
-    msg["last_price"] = float(msg["LTP"])
-    msg["LTP"] = msg["last_price"]
+    #msg["last_price"] = float(msg["LTP"]) * 3.67
+    #msg["LTP"] = msg["last_price"]
 
 
     candle = idx_builder.process_tick(msg)
@@ -452,7 +453,7 @@ def on_index_candle(token, timestamp, candle):
 def on_option_tick(msg):
     global ce_state, pe_state, telemetry
 
-    """ print(telemetry) """
+    
     
     if msg["type"] != 'Quote Data':
         return
@@ -489,18 +490,35 @@ def on_option_tick(msg):
         state["enter_now"] = False
 
         # SL / TSL init
-        state["sl"] = ltp - 15   # loss side (SELL)
         state["tsl"] = ltp - 30  # profit trigger
+        state["sl"] = ltp - 15   # loss side (SELL)
         state["tsl_active"] = False
 
         print(f"✅ {leg_name} ENTRY @ {ltp}")
 
-        log_event(leg_name, token, "ENTRY", ltp, "Breakout Entry")
+
+        #log_event(leg_name, token, "ENTRY", ltp, "Breakout Entry")
+        print(f"{leg_name}, {token}, {SYMBOL}, {state["lot"]}, {ltp},{telemetry["pnl"]}")
+
 
         log_trade_event(
+                event_type="ENTRY",
+                leg_name=str(leg_name),
+                token=int(token),
+                symbol=SYMBOL,
+                side="SELL",
+                lot=state["lot"],
+                price=ltp,
+                reason="TIME EXIT",
+                pnl= 0,
+                cum_pnl=telemetry["pnl"]
+                )
+
+
+        """ log_trade_event(
             "ENTRY",
-            leg_name,
-            token,
+            str(leg_name),
+            int(token),
             SYMBOL,
             "SELL",
             state["lot"],
@@ -508,7 +526,7 @@ def on_option_tick(msg):
             "BREAKOUT",
             0,
             telemetry["pnl"]
-        )   
+        )    """
 
     # =========================
     # 🔴 POSITION MANAGEMENT
@@ -531,9 +549,23 @@ def on_option_tick(msg):
             state["rearm_required"] = True
             state["force_exit"] = False
 
-            log_event(leg_name, token, "EXIT", ltp, "INDEX EXIT")
+            #log_event(leg_name, token, "EXIT", ltp, "INDEX EXIT")
+            
 
             log_trade_event(
+                event_type="EXIT",
+                leg_name=str(leg_name),
+                token=token,
+                symbol=SYMBOL,
+                side="BUY",
+                lot=state["lot"],
+                price=ltp,
+                reason="TIME EXIT",
+                pnl= float(final_pnl),
+                cum_pnl=telemetry["pnl"]
+                )
+
+            """ log_trade_event(
                 "EXIT",
                 leg_name,
                 token,
@@ -544,7 +576,7 @@ def on_option_tick(msg):
                 "INDEX_EXIT",
                 final_pnl,
                 telemetry["pnl"]
-                )   
+                ) """   
 
         entry = state["entry_price"]
 
@@ -582,34 +614,47 @@ def on_option_tick(msg):
                     state["sl"] = new_sl
                     print(f"🔁 {leg_name} TRAIL SL -> {state['sl']}")
 
-        # =========================
-        # ❌ SL HIT
-        # =========================
-        if ltp >= state["sl"]:
-            print(f"❌ {leg_name} SL HIT @ {ltp}")
+                # =========================
+                # ❌ SL HIT
+                # =========================
+                if ltp >= state["sl"]:
+                    print(f"❌ {leg_name} SL HIT @ {ltp}")
 
-            exit_price = ltp
-            final_pnl = entry - exit_price
+                    exit_price = ltp
+                    final_pnl = entry - exit_price
 
-            telemetry["pnl"] += final_pnl
+                    telemetry["pnl"] += final_pnl
 
-            state["position"] = False
-            state["rearm_required"] = True
+                    state["position"] = False
+                    state["rearm_required"] = True
 
-            log_event(leg_name, token, "EXIT", ltp, "SL HIT")
+                    #log_event(leg_name, token, "EXIT", ltp, "SL HIT")
 
-            log_trade_event(
-                "EXIT",
-                leg_name,
-                token,
-                SYMBOL,
-                "BUY",
-                state["lot"],
-                exit_price,
-                "SL",
-                final_pnl,
-                telemetry["pnl"]
-            )
+                    log_trade_event(
+                    event_type="EXIT",
+                    leg_name=str(leg_name),
+                    token=token,
+                    symbol=SYMBOL,
+                    side="BUY",
+                    lot=state["lot"],
+                    price=exit_price,
+                    reason="SL",
+                    pnl= final_pnl,
+                    cum_pnl=telemetry["pnl"]
+                    )
+
+                    """ log_trade_event(
+                        "EXIT",
+                        leg_name,
+                        token,
+                        SYMBOL,
+                        "BUY",
+                        state["lot"],
+                        exit_price,
+                        "SL",
+                        final_pnl,
+                        telemetry["pnl"]
+                    ) """
 
         # =========================
         # 🧠 DAY TARGET CHECK
@@ -642,6 +687,9 @@ if __name__ == "__main__":
     feed = marketfeed.DhanFeed(CLIENT_ID, ACCESS_TOKEN, instruments, "v2")
 
     print("\n🚀 Range Breakout Paper Engine Running...\n")
+    
+    threading.Thread(target=trade_log_worker, daemon=True).start()
+
 
     while True:
         try:

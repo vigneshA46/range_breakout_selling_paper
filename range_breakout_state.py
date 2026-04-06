@@ -336,7 +336,6 @@ def on_tick_index(msg):
     msg["last_price"] = float(msg["LTP"]) * 3.67
     msg["LTP"] = msg["last_price"]
 
-    print(msg["LTP"])
 
     candle = idx_builder.process_tick(msg)
 

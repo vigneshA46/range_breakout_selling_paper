@@ -48,7 +48,7 @@ ACCESS_TOKEN = get_access_token()
 IST = pytz.timezone("Asia/Kolkata")
 
 
-INDEX_TOKEN = "13"
+INDEX_TOKEN = 13
 
 TRADE_START = dtime(10, 1)
 TRADE_END   = dtime(15, 20)
@@ -333,7 +333,7 @@ def mark_range():
 
 def on_tick_index(msg):
     # convert scaled price → real price
-    msg["last_price"] = float(msg["LTP"]) * 3.67
+    msg["last_price"] = float(msg["LTP"])
     msg["LTP"] = msg["last_price"]
 
 

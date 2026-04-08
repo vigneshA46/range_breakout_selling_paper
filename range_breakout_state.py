@@ -78,7 +78,7 @@ telemetry = {
     "ce_ltp": 0,
     "pe_ltp": 0,
     "ce_pnl": 0,
-    "pe_pnl": 0
+    "pe_pnl": 0,
 }
 
 
@@ -213,8 +213,8 @@ def log_trade_event(
 
         "reason": reason,
         "deployed_by": COMMON_ID,
-        "pnl": str(pnl),
-        "cum_pnl": str(cum_pnl),
+        "pnl": str(pnl *65),
+        "cum_pnl": str(cum_pnl *65),
     }
 
     # 🔥 NON-BLOCKING
@@ -333,15 +333,40 @@ def mark_range():
 
 
 def on_tick_index(msg):
-    # convert scaled price → real price
-    #msg["last_price"] = float(msg["LTP"]) * 3.67
-    #msg["LTP"] = msg["last_price"]
+    global ce_state, pe_state, top_line, bottom_line
+
+    if msg.get("type") != "Quote Data":
+        return
+
+    ltp = float(msg["LTP"])
+
+    # =========================
+    # 🔴 REAL-TIME EXIT LOGIC
+    # =========================
+
+    # PE EXIT → index falls below top line
+    if pe_state["position"] and ltp < top_line:
+        if not pe_state.get("force_exit"):   # prevent repeat triggers
+            print("⚡ PE EXIT (Tick based)")
+
+            pe_state["force_exit"] = True
+            pe_state["exit_reason"] = "INDEX_TICK_EXIT"
+
+    # CE EXIT → index rises above bottom line
+    if ce_state["position"] and ltp > bottom_line:
+        if not ce_state.get("force_exit"):
+            print("⚡ CE EXIT (Tick based)")
+
+            ce_state["force_exit"] = True
+            ce_state["exit_reason"] = "INDEX_TICK_EXIT"
 
 
     candle = idx_builder.process_tick(msg)
 
     if candle:
         on_index_candle(msg["security_id"], datetime.now(IST), candle)
+
+        
 
 def init_state():
     return {
@@ -382,23 +407,6 @@ def on_index_candle(token, timestamp, candle):
 
     print(f"\n🕯 Candle | O:{o} H:{h} L:{l} C:{c} AVG:{avg_price} TIME: {current_time}")
 
-    # =========================================================
-    # 🔴 EXIT LOGIC (INDEX BASED)
-    # =========================================================
-
-    # PE EXIT → close below top line
-    if pe_state["position"] and c < top_line:
-        print("❌ PE EXIT (Index crossed below top line)")
-
-        pe_state["force_exit"] = True
-        pe_state["exit_reason"] = "INDEX_EXIT"
-
-    # CE EXIT → close above bottom line
-    if ce_state["position"] and c > bottom_line:
-        print("❌ CE EXIT (Index crossed above bottom line)")
-
-        ce_state["force_exit"] = True
-        ce_state["exit_reason"] = "INDEX_EXIT"
 
     # =========================================================
     # 🔁 REARM LOGIC
@@ -490,8 +498,8 @@ def on_option_tick(msg):
         state["enter_now"] = False
 
         # SL / TSL init
-        state["tsl"] = ltp - 30  # profit trigger
-        state["sl"] = ltp - 15   # loss side (SELL)
+        state["tsl"] = ltp - 40  # profit trigger
+        state["sl"] = ltp - 25   # loss side (SELL)
         state["tsl_active"] = False
 
         print(f"✅ {leg_name} ENTRY @ {ltp}")
@@ -509,24 +517,10 @@ def on_option_tick(msg):
                 side="SELL",
                 lot=state["lot"],
                 price=ltp,
-                reason="TIME EXIT",
+                reason="BREAKOUT",
                 pnl= 0,
                 cum_pnl=telemetry["pnl"]
                 )
-
-
-        """ log_trade_event(
-            "ENTRY",
-            str(leg_name),
-            int(token),
-            SYMBOL,
-            "SELL",
-            state["lot"],
-            ltp,
-            "BREAKOUT",
-            0,
-            telemetry["pnl"]
-        )    """
 
     # =========================
     # 🔴 POSITION MANAGEMENT
@@ -546,7 +540,7 @@ def on_option_tick(msg):
             telemetry["pnl"] += final_pnl
 
             state["position"] = False
-            state["rearm_required"] = True
+            
             state["force_exit"] = False
 
             #log_event(leg_name, token, "EXIT", ltp, "INDEX EXIT")
@@ -563,20 +557,7 @@ def on_option_tick(msg):
                 reason="TIME EXIT",
                 pnl= float(final_pnl),
                 cum_pnl=telemetry["pnl"]
-                )
-
-            """ log_trade_event(
-                "EXIT",
-                leg_name,
-                token,
-                SYMBOL,
-                "BUY",
-                state["lot"],
-                exit_price,
-                "INDEX_EXIT",
-                final_pnl,
-                telemetry["pnl"]
-                ) """   
+                )   
 
         entry = state["entry_price"]
 
@@ -643,26 +624,15 @@ def on_option_tick(msg):
                     cum_pnl=telemetry["pnl"]
                     )
 
-                    """ log_trade_event(
-                        "EXIT",
-                        leg_name,
-                        token,
-                        SYMBOL,
-                        "BUY",
-                        state["lot"],
-                        exit_price,
-                        "SL",
-                        final_pnl,
-                        telemetry["pnl"]
-                    ) """
-
         # =========================
         # 🧠 DAY TARGET CHECK
         # =========================
-        if telemetry["pnl"] >= DAY_TARGET:
+        """ if telemetry["pnl"] >= DAY_TARGET:
             print("🎯 DAY TARGET HIT — STOP TRADING" , telemetry["pnl"])
 
-            state["trading_disabled"] = True
+            state["force_exit"]  = True
+            state["trading_disabled"] = False
+            state["rearm_required"] = True """
 
 # =========================
 # MAIN
@@ -700,7 +670,6 @@ if __name__ == "__main__":
             if msg:
 
                 if str(msg["security_id"]) == INDEX_TOKEN:
-                    """ print(msg) """
                     on_tick_index(msg)
 
                 elif str(msg["security_id"]) in (CE_ID, PE_ID):

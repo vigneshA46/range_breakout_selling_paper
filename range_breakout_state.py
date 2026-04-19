@@ -9,7 +9,6 @@ from dhanhq import marketfeed
 from dhanhq import dhanhq
 from dhan_token import get_access_token
 from candle_builder import OneMinuteCandleBuilder
-from dispatcher import subscribe
 
 from find_security import load_fno_master, find_option_security
 

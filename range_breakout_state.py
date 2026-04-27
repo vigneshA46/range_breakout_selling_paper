@@ -5,8 +5,8 @@ import pandas as pd
 from datetime import datetime, time as dtime
 from dotenv import load_dotenv
 import os
-from dhanhq import marketfeed
-from dhanhq import dhanhq
+from dhanhq import MarketFeed
+from dhanhq import dhanhq,DhanContext
 from dhan_token import get_access_token
 from candle_builder import OneMinuteCandleBuilder
 
@@ -31,9 +31,6 @@ symbol="NIFTY"
 
 load_dotenv()
 
-CLIENT_ID = os.getenv("CLIENT_ID")
-#CLIENT_ID = "1107425275"
-ACCESS_TOKEN = get_access_token()
 
 IST = pytz.timezone("Asia/Kolkata")
 
@@ -54,8 +51,10 @@ today = datetime.now(IST).strftime("%Y-%m-%d")
 # =========================
 # LOGIN
 # =========================
-
-dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
+access_token = get_access_token()
+client_id = os.getenv("CLIENT_ID")
+dhan_context = DhanContext(client_id, access_token)
+dhan = dhanhq(dhan_context)
 
 builder = OneMinuteCandleBuilder()
 fno_df = load_fno_master()
@@ -626,12 +625,12 @@ ce_state = init_state();
 pe_state = init_state();
 
 instruments = [
-    (marketfeed.IDX, INDEX_TOKEN,marketfeed.Quote ),
-    (marketfeed.NSE_FNO, CE_ID,marketfeed.Quote),
-    (marketfeed.NSE_FNO, PE_ID,marketfeed.Quote)
+    (MarketFeed.IDX, INDEX_TOKEN,MarketFeed.Quote ),
+    (MarketFeed.NSE_FNO, CE_ID,MarketFeed.Quote),
+    (MarketFeed.NSE_FNO, PE_ID,MarketFeed.Quote)
 ]
 
-feed = marketfeed.DhanFeed(CLIENT_ID, ACCESS_TOKEN, instruments, "v2")
+feed = MarketFeed(dhan_context, instruments, "v2")
 
 print("\n🚀 Range Breakout Paper Engine Running...\n")
     

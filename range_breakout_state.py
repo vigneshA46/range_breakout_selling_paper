@@ -455,6 +455,8 @@ def on_option_tick(msg):
 
     if msg["type"] != 'Quote Data':
         return
+    
+    now = datetime.now(IST).time()
 
     token = str(msg["security_id"])
     ltp = float(msg["LTP"])
@@ -518,6 +520,41 @@ def on_option_tick(msg):
     # =========================
     if state["position"]:
 
+
+        if now >= TRADE_END:
+
+            telemetry["status"] = "CLOSED"
+
+            print(f"⏰ {leg_name} TIME EXIT @ {ltp}")
+
+            exit_price = ltp
+            final_pnl = state["entry_price"] - exit_price
+
+            state["pnl"] = final_pnl
+            telemetry["pnl"] += final_pnl
+
+            state["position"] = False
+            state["enter_now"] = False
+            state["rearm_required"] = False
+            state["trading_disabled"] = True
+            state["force_exit"] = False
+            state["tsl_active"] = False
+
+            log_trade_event(
+                event_type="EXIT",
+                leg_name=str(leg_name),
+                token=token,
+                symbol=SYMBOL,
+                side="BUY",
+                lot=state["lot"],
+                price=exit_price,
+                reason="TIME EXIT",
+                pnl=float(final_pnl),
+                cum_pnl=telemetry["pnl"]
+            )
+
+            return
+
         # =========================
         # ⚡ FORCE EXIT (INDEX BASED)
         # =========================
@@ -545,7 +582,7 @@ def on_option_tick(msg):
                 side="BUY",
                 lot=state["lot"],
                 price=ltp,
-                reason="TIME EXIT",
+                reason="INDEX EXIT",
                 pnl= float(final_pnl),
                 cum_pnl=telemetry["pnl"]
                 )
